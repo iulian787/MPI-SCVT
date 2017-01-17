@@ -1,13 +1,15 @@
 CC = mpic++
-BDIR = /opt/local/boost_1_48_0-gcc
-NCDFDIR = /opt/local/netcdf-4.1.3-gcc
-LIBS = -I${BDIR}/include/ -L${BDIR}/lib/ -lboost_mpi -lboost_serialization
+# BDIR = /usr
+BDIR = /home/iulian/lib/boost.1.55
+#NCDFDIR = /home/iulian/3rdparty/netcdf/4.3.3.1c-4.2cxx-4.4.2f/mpich-3.2/gnu5
+NCDFDIR = /usr
+LIBS = -I${BDIR}/include/ -I${BDIR}/include/boost -L${BDIR}/lib -lboost_mpi -lboost_serialization 
 
-ifeq ($(NETCDF),yes)
-NCDFDIR = /opt/local/netcdf-4.1.3-gcc
+#ifeq ($(NETCDF),yes)
+NCDFDIR = /home/iulian/3rdparty/netcdf/4.3.3.1c-4.2cxx-4.4.2f/mpich-3.2/gnu5
 LIBS += -I$(NCDFDIR)/include/ -L$(NCDFDIR)/lib/ -lnetcdf -lnetcdf_c++
 NCDF_FLAGS = -DUSE_NETCDF
-endif
+#endif
 
 FLAGS = -O3 -m64 $(NCDF_FLAGS)
 DFLAGS = -g -m64 -D_DEBUG
