@@ -2943,16 +2943,16 @@ double density(const pnt &p){/*{{{*/
 	return density;
 	// */
 	
-	/* Ellipse density function.
+	/* Ellipse density function. */
 	
-	return ellipse_density(p, 40.0, 0.0, 1.0, 0.5);
+	return (ellipse_density(p, 40.0, -98., 0.6, 0.5) + 2*ellipse_density(p, 40.0, -98., 0.1, 0.2) );
 	// */
     
     /* Pop low resolution density function.
     return pop_lowres_density(p);
     // */
     
-    // /* Pop high resolution density function. 
+    /* Pop high resolution density function.
     return pop_highres_density(p);
     // */
 

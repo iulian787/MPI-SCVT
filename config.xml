@@ -3,7 +3,7 @@
 	description="Set to use for initial points. 0 - Read from SaveVertices, 1 - Monte Carlo, 2 - Generalized Spiral, 3 - Fibbonaci Grid"
 />
 
-<number_of_generated_points value="162"
+<number_of_generated_points value="20000"
 	possible_values="Any positive integer"
 	description="If initial_point_set is set to anything other than 0, this defines the number of points that will be generated."
 />
