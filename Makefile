@@ -1,17 +1,16 @@
 CC = mpic++
 # BDIR = /usr
-BDIR = /home/iulian/lib/boost.1.55
-#NCDFDIR = /home/iulian/3rdparty/netcdf/4.3.3.1c-4.2cxx-4.4.2f/mpich-3.2/gnu5
-NCDFDIR = /usr
-LIBS = -I${BDIR}/include/ -I${BDIR}/include/boost -L${BDIR}/lib -lboost_mpi -lboost_serialization 
+BDIR = /home/iulian/3rdparty/boost/1.68.0
+LIBS = -I${BDIR}/include -I${BDIR}/include/boost -L${BDIR}/lib -lboost_mpi -lboost_serialization 
 
 #ifeq ($(NETCDF),yes)
-NCDFDIR = /home/iulian/3rdparty/netcdf/4.3.3.1c-4.2cxx-4.4.2f/mpich-3.2/gnu5
-LIBS += -I$(NCDFDIR)/include/ -L$(NCDFDIR)/lib/ -lnetcdf -lnetcdf_c++
+NCDFDIR = /home/iulian/3rdparty/netcdf/4.3.3.1c-4.2cxx-4.4.2f-parallel/gnu-6.4/mpich-3.2.1
+HDF5DIR=/home/iulian/3rdparty/hdf5/1.8.16/gnu6.4/mpich3.2.1
+LIBS += -I$(NCDFDIR)/include/ -L$(NCDFDIR)/lib/ -lnetcdf_c++ -lnetcdf -L$(HDF5DIR)/lib -lhdf5 -lhdf5_hl
 NCDF_FLAGS = -DUSE_NETCDF
 #endif
 
-FLAGS = -O3 -m64 $(NCDF_FLAGS)
+FLAGS =  -m64 $(NCDF_FLAGS)
 DFLAGS = -g -m64 -D_DEBUG
 EXE=MpiScvt.x
 TRISRC=Triangle/
@@ -21,7 +20,7 @@ PLATFORM=_MACOS
 PLATFORM=_LINUX
 
 ifeq ($(PLATFORM),_LINUX)
-	FLAGS = -O3 -m64 -DLINUX $(NCDF_FLAGS)
+	FLAGS = -m64 -DLINUX $(NCDF_FLAGS)
 	DFLAGS = -g -m64 -D_DEBUG -DLINUX
 endif
 

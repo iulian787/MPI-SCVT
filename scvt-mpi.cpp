@@ -161,7 +161,6 @@ char * flags;
 //Processor information and global communicator
 const int master = 0;
 int id, num_procs;
-mpi::communicator world;
 
 // Message tags for sending and receiving non-blocking messages
 enum {msg_points, msg_tri_print , msg_restart, msg_ave, msg_max, msg_l1};
@@ -212,8 +211,7 @@ double wq19[19], q19[12];
 const int num_timers = 8;
 const int num_global_timers = 4;
 
-mpi_timer my_timers[num_timers];
-mpi_timer global_timers[num_global_timers];
+
 string names[num_timers] = {"Total", "Iteration", "Triangulation", "Integration", "Metrics", "Communication", "Convergence Check", "Sort"};
 string global_names[num_global_timers] = {"Global Time", "Final Gather", "Final Triangulation", "Final Bisection"};
 
@@ -250,8 +248,8 @@ void printRegions();
 void readBoundaries();
 /*}}}*/
 /* ***** Bisect Edges Routines *****{{{*/
-void bisectEdges(int end);
-void bisectTriangulation(int output);
+void bisectEdges(int end, mpi::communicator & world);
+void bisectTriangulation(int output, mpi::communicator & comm);
 /*}}}*/
 /* ***** Point Init Routines ***** {{{*/
 void readPoints();
@@ -283,15 +281,15 @@ void annealPoints(vector<region> &region_vec);
 /*}}}*/
 /* ***** Specific Region Routines ***** {{{ */
 void printAllFinalTriangulation();
-void printMyFinalTriangulation();
-void storeMyFinalTriangulation();
+void printMyFinalTriangulation(mpi::communicator & comm);
+void storeMyFinalTriangulation(mpi::communicator & comm);
 /*}}}*/
 /* ***** Communication Routines ***** {{{*/
-void transferUpdatedPoints();
-void gatherAllUpdatedPoints();
+void transferUpdatedPoints(mpi::communicator & comm);
+void gatherAllUpdatedPoints(mpi::communicator & comm);
 /*}}}*/
 /* ***** Routines for Points *****{{{*/
-void writePointsAsRestart(const int it, const restart_mode_type restart_mode, const fileio_mode_type fileio_mode);
+void writePointsAsRestart(const int it, const restart_mode_type restart_mode, const fileio_mode_type fileio_mode, mpi::communicator & comm);
 #ifdef USE_NETCDF
 int writeRestartFileOverwriteNC( const int it, const vector<pnt> &points );
 int writeRestartFileRetainNC( const int it, const vector<pnt> &points );
@@ -304,12 +302,18 @@ double pop_highres_density(const pnt &p);
 double ellipse_density(const pnt &p, double lat_c, double lon_c, double lat_width, double lon_width);
 /*}}}*/
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
 	int bisection;
 	int it, i;
 	int stop, force_anneal, do_proj;
 	int ave_points, my_points;
+	mpi::communicator world;
+	mpi::environment env(argc, argv);
 	mpi::request *ave_comms, *max_comms, *l1_comms;
+	mpi_timer my_timers[num_timers];
+	mpi_timer global_timers[num_global_timers];
+
 	double *my_ave, *my_max, *my_l1;
 	double glob_ave, glob_max, glob_l1;
 	double last_glob_ave, last_glob_max, last_glob_l1;
@@ -324,7 +328,6 @@ int main(int argc, char **argv){
 	}
 	global_timers[0].start(); // Global Time Timer
 
-	mpi::environment env(argc, argv);	
 	id = world.rank();
 	num_procs = world.size();
 
@@ -497,7 +500,7 @@ int main(int argc, char **argv){
 			my_timers[4].stop();
 			
 			my_timers[5].start(); // Communication Timer
-			transferUpdatedPoints();
+			transferUpdatedPoints(world);
 			my_timers[5].stop();
 
 			my_timers[6].start();
@@ -551,7 +554,7 @@ int main(int argc, char **argv){
 			
 			if(restart > 0 && it > 0){
 				if(it%restart == 0){
-					writePointsAsRestart(it, restart_mode, fileio_mode);
+					writePointsAsRestart(it, restart_mode, fileio_mode, world);
 				}
 			}
 		}
@@ -560,7 +563,7 @@ int main(int argc, char **argv){
 
 		// Bisect if needed
 		if(bisection < num_bisections){
-			bisectTriangulation(0);
+			bisectTriangulation(0, world);
 		} else {
 			if(id == master){
 				cout << "No more bisections for convergence" << endl;
@@ -598,7 +601,7 @@ int main(int argc, char **argv){
 
 	//Gather all updated points onto master processor, for printing to end_points.dat
 	global_timers[1].start(); // Global Gather Timer
-	gatherAllUpdatedPoints();
+	gatherAllUpdatedPoints(world);
 	global_timers[1].stop();
 
 	// Compute final triangulation by merging all triangulations from each processor into an
@@ -610,7 +613,7 @@ int main(int argc, char **argv){
 	makeFinalTriangulations(my_regions);
 	global_timers[2].stop();
 
-	printMyFinalTriangulation();
+	printMyFinalTriangulation(world);
 
 	if(id == master){
 		ofstream end_pts("end_points.dat");
@@ -630,7 +633,7 @@ int main(int argc, char **argv){
 
 	//Bisect all edges of all triangles to give an extra point set at the end, bisected_points.dat
 	global_timers[3].start(); // Final Bisection Timer
-	bisectTriangulation(1);
+	bisectTriangulation(1, world);
 	global_timers[3].stop();
 
 	//Print out final timers, for global times.
@@ -1002,7 +1005,7 @@ void printRegions(){/*{{{*/
 }/*}}}*/
 /* }}} */
 /* ***** Bisect Edges Routines ***** {{{ */
-void bisectEdges(int end){/*{{{*/
+void bisectEdges(int end,   mpi::communicator & world){/*{{{*/
 	//void bisectEdges(int end)
 	// This function actually performs the bisection of the point set.
 	// All bisections are performed on the master process
@@ -1072,7 +1075,7 @@ void bisectEdges(int end){/*{{{*/
 	mpi::broadcast(world, points, master);
 	return;
 }/*}}}*/
-void bisectTriangulation(int output){/*{{{*/
+void bisectTriangulation(int output, mpi::communicator & comm){/*{{{*/
 	// void bisectTriangulation(int end)
 	//
 	// Sets up the required datastructures to perform the bisection with
@@ -1082,8 +1085,8 @@ void bisectTriangulation(int output){/*{{{*/
 	if(!output)
 		makeFinalTriangulations(my_regions);
 
-	storeMyFinalTriangulation();
-	bisectEdges(output);
+	storeMyFinalTriangulation(comm);
+	bisectEdges(output, comm);
 
 	if(id == master && output){
 		ofstream pts_out("bisected_points.dat");
@@ -2511,7 +2514,7 @@ void printAllFinalTriangulation(){/*{{{*/
 	}
 	utris_out.close();
 }/*}}}*/
-void printMyFinalTriangulation(){/*{{{*/
+void printMyFinalTriangulation(mpi::communicator & comm){/*{{{*/
 	//Merge all finalTriangulations made with makeFinalTriangulations onto master processor.
 	//Master processor inserts all triangles into an unordered_set to create a list of unique triangles
 	//Triangles are then written into a file triangles.dat in ccw order
@@ -2527,7 +2530,7 @@ void printMyFinalTriangulation(){/*{{{*/
 		cerr << " Print my final triangulation " << id << endl;
 	#endif
 
-	storeMyFinalTriangulation();
+	storeMyFinalTriangulation(comm);
 	if(id == master){
 		ofstream tris_out("triangles.dat");
 
@@ -2545,7 +2548,7 @@ void printMyFinalTriangulation(){/*{{{*/
 		cerr << " Print my final triangulation done " << id << endl;
 	#endif
 }/*}}}*/
-void storeMyFinalTriangulation(){/*{{{*/
+void storeMyFinalTriangulation(mpi::communicator & world){/*{{{*/
 	//Merge all finalTriangulations made with makeMyFinalTriangulations onto master processor.
 	//Master processor inserts all triangles into an unordered_set to create a list of unique triangles
 	//Triangles are then written into a file triangles.dat in ccw order
@@ -2606,7 +2609,7 @@ void storeMyFinalTriangulation(){/*{{{*/
 }/*}}}*/
 /*}}}*/
 /* ***** Communication Routines ***** {{{*/
-void transferUpdatedPoints(){/*{{{*/
+void transferUpdatedPoints(mpi::communicator & world){/*{{{*/
 	//Each processor transfers it's updated point set (stored in n_points) to it's region neighbors
 	//as defined in RegionTriangulation
 	//
@@ -2657,7 +2660,7 @@ void transferUpdatedPoints(){/*{{{*/
 	cerr << "Done Transfering updated points " << id << endl;
 #endif
 }/*}}}*/
-void gatherAllUpdatedPoints(){/*{{{*/
+void gatherAllUpdatedPoints(mpi::communicator & world){/*{{{*/
 	//All updated points (stored in n_points) are gathered onto the master processor and broadcasted to every processor
 	vector<pnt> temp_points;
 	mpi::request mycomm;
@@ -2706,14 +2709,14 @@ void gatherAllUpdatedPoints(){/*{{{*/
 }/*}}}*/
 /*}}}*/
 /* ***** Routines for Points ***** {{{*/
-void writePointsAsRestart(const int it, const restart_mode_type restart_mode, const fileio_mode_type fileio_mode){/*{{{*/
+void writePointsAsRestart(const int it, const restart_mode_type restart_mode, const fileio_mode_type fileio_mode, mpi::communicator & comm){/*{{{*/
 
 	#ifdef _DEBUG
 		cerr << "Writing restart file " << id << endl;
 	#endif
 
 	if(it > 0){
-		gatherAllUpdatedPoints();
+		gatherAllUpdatedPoints(comm);
 
 		if(id == master){
 
